@@ -1,1 +1,74 @@
+import torch
+import random
+
+"""
+    要求：从标准正态分布生成一个包含1000个样本的数据集，每个样本包含2个特征。
+    假定目标值w = [3,-2.2]，b = 3.6，噪声项服从均值为0的正态分布
+"""
+
+# 生成数据集
+def synthetic_data(w,b,num_examples):
+    """生成y=Xw+b+噪声"""
+    X = torch.normal(0,1,(num_examples,len(w)))
+    y = torch.matmul(X,w)+b
+    y += torch.normal(0,0.01,y.size())
+    return X,y.view(-1,1)
+
+true_w = torch.tensor([3,-2.2])
+truw_b = 3.6
+num_examples = 1000
+features,labels = synthetic_data(true_w,truw_b,num_examples=num_examples)
+
+# 用mini-batch训练
+def data_iter(batch_size,features,labels):
+    num_examples = len(features)
+    indices = list(range(num_examples))
+    random.shuffle(indices)
+    for i in range(0,num_examples,batch_size):
+        batch_indice = torch.tensor(
+            indices[i:min(i+batch_size,num_examples)]
+        )
+        yield features[batch_indice],labels[batch_indice] # 返回一个可迭代对象
+
+# 初始化模型参数
+batch_size = 10
+w = torch.normal(0,0.01,size=(2,1),requires_grad=True)
+b = torch.zeros(1,requires_grad=True)
+
+# 定义线性模型
+def linear_model(w,b,X):
+    return torch.matmul(X,w)+b
+
+# 定义损失函数---均方差损失
+def squared_loss(y_hat,y):
+    return (y - y_hat.reshape(y.shape)) ** 2 / 2
+
+# 定义优化算法---小批量梯度下降算法
+def sgd(params,batch_size,lr):
+    with torch.no_grad(): # 将该模块下的所有参数的required_true 都设置为False
+        for param in params:
+
+            param -= lr*param.grad / batch_size
+
+            param.grad.zero_() # 要记得清空累计梯度
+
+# 训练过程
+epoch = 15
+net = linear_model
+loss = squared_loss
+for i in range(epoch):
+    for X,y in data_iter(batch_size,features,labels):
+        y_hat = linear_model(w,b,X)
+        loss_batch = loss(y_hat,y)
+        # 误差反向传播
+        loss_batch.sum().backward()
+        # 更新参数
+        sgd([w,b],batch_size,lr=1e-3)
+    with torch.no_grad():
+        train_l = loss(net(w,b,features),labels)
+        print(f'第{i+1}个epoch的训练误差是：{train_l.mean().item()}')
+
+# 输出最终的w和b
+print("w=",w)
+print("b=",b)
 
