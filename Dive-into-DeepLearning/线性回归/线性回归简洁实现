@@ -1,1 +1,82 @@
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils import data
 
+true_w = torch.tensor([2,-3.4])
+true_b = 4.2
+num_examples = 1000
+
+# 生成数据
+def synthetic_data(true_w,true_b,num_examples):
+    x = torch.normal(0,1,size=(num_examples,len(true_w)))
+    y = torch.matmul(x,true_w) + true_b
+    y += torch.normal(0,0.01,size=y.size())
+    return x,y.view(-1,1)
+
+# 生成迭代器
+def load_array(data_arrays,batch_size,is_train=True):
+    """构造一个Pytorch迭代器"""
+    dataset = data.TensorDataset(*data_arrays) # 用*来解包,先获得dataset
+    return data.DataLoader(dataset,batch_size=batch_size,shuffle=is_train) # 再构造dataLoader
+
+# 定义模型、损失函数和优化器
+class net(nn.Module):
+    def __init__(self):
+        super(net,self).__init__()
+        self.linear1 = nn.Sequential(
+            nn.Linear(2,1)
+        )
+    def forward(self,x):
+        x = self.linear1(x)
+        return x
+
+def initialize_weights(m):
+    if isinstance(m,nn.Conv2d):
+        m.weight.data.normal_(0,0.02)
+        m.bias.data.zero_()
+    elif isinstance(m,nn.Linear):
+        m.weight.data.normal_(0,0.02)
+        m.weight.data.zero_()
+
+features,labels = synthetic_data(true_w,true_b,num_examples)
+batch_size = 10
+data_iter = load_array((features,labels),batch_size)
+
+model = net()
+model.apply(initialize_weights)
+loss = nn.MSELoss()
+
+optimizer = torch.optim.SGD(model.parameters(),lr=0.03)
+# print(model)
+# print(model.linear1[0])
+# net(
+#   (linear1): Sequential(
+#     (0): Linear(in_features=2, out_features=1, bias=True)
+#   )
+# )
+# Linear(in_features=2, out_features=1, bias=True)
+
+# 初始化模型的参数
+# model.linear1[0].weight.data.normal_(0,0.01)
+# model.linear1[0].bias.data.fill_(0)
+
+# 训练过程
+num_epochs = 3
+for epoch in range(num_epochs):
+    for x,y in data_iter:
+        y_hat = model(x)
+        l = loss(y_hat,y)
+        optimizer.zero_grad()
+        l.backward()
+        optimizer.step()
+    l = loss(model(features),labels).item()
+    print(f'EPOCH={epoch+1},LOSS={l}')
+
+w = model.linear1[0].weight.data
+print('w的估计误差：', true_w - w.reshape(true_w.shape))
+b = model.linear1[0].bias.data
+print('b的估计误差：', true_b - b)
+
+print('w',w)
+print('b',b)
